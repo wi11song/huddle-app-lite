@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preflight:
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, linux, x64, huddle-ci]
+    outputs:
+      app-ready: ${{ steps.readiness.outputs.app-ready }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: readiness
+        name: Detect application scaffold
+        shell: bash
+        run: |
+          required_paths=(
+            app/__main__.py
+            requirements.lock
+            requirements-dev.txt
+            scripts/verify_startup.py
+            tests
+          )
+
+          missing=()
+          for path in "${required_paths[@]}"; do
+            if [[ ! -e "$path" ]]; then
+              missing+=("$path")
+            fi
+          done
+
+          if (( ${#missing[@]} > 0 )); then
+            echo "app-ready=false" >> "$GITHUB_OUTPUT"
+            printf 'CI scaffold is inactive; missing: %s\n' "${missing[*]}"
+          else
+            echo "app-ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  scaffold:
+    needs: preflight
+    if: needs.preflight.outputs.app-ready != 'true'
+    runs-on: [self-hosted, linux, x64, huddle-ci]
+    steps:
+      - name: Report scaffold state
+        run: |
+          echo "::notice::CI/CD files are installed, but application code and dependency locks are not complete. Test and release jobs were skipped."
+
+  test:
+    needs: preflight
+    if: needs.preflight.outputs.app-ready == 'true'
+    runs-on: [self-hosted, linux, x64, huddle-ci]
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.10"
+          - "3.13"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.lock
+            requirements-dev.txt
+
+      - name: Install test dependencies
+        run: python -m pip install --requirement requirements-dev.txt
+
+      - name: Compile sources
+        run: python -m compileall -q app tests scripts
+
+      - name: Run tests
+        run: python -m pytest -q
+        env:
+          HUDDLE_DB_PATH: ${{ runner.temp }}/huddle-test-${{ matrix.python-version }}.db
+
+      - name: Verify application startup
+        run: python scripts/verify_startup.py
+        env:
+          HUDDLE_DB_PATH: ${{ runner.temp }}/huddle-startup-${{ matrix.python-version }}.db
+
+  bundle:
+    needs:
+      - preflight
+      - test
+    if: >-
+      needs.preflight.outputs.app-ready == 'true' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, x64, huddle-ci]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Assemble immutable release
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p bundle/wheelhouse
+          git archive "$GITHUB_SHA" | tar -x -C bundle
+          python -m pip download \
+            --requirement requirements.lock \
+            --dest bundle/wheelhouse
+          tar -C bundle -czf "huddle-app-$GITHUB_SHA.tar.gz" .
+          sha256sum "huddle-app-$GITHUB_SHA.tar.gz" \
+            > "huddle-app-$GITHUB_SHA.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: huddle-app-${{ github.sha }}
+          path: |
+            huddle-app-${{ github.sha }}.tar.gz
+            huddle-app-${{ github.sha }}.sha256
+          if-no-files-found: error
+          retention-days: 14
