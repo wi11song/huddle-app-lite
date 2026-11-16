@@ -105,6 +105,7 @@ new_link="$current_link.new"
 ln -sfn "$release_directory" "$new_link"
 mv -Tf "$new_link" "$current_link"
 
+sudo --non-interactive systemctl enable "$service_name"
 if $service_stopped; then
   sudo --non-interactive systemctl start "$service_name"
 else

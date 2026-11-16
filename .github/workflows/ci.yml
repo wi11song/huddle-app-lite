@@ -19,7 +19,7 @@ jobs:
     if: >-
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, linux, x64, huddle-ci]
+    runs-on: [self-hosted, linux, ARM64, huddle-ci]
     outputs:
       app-ready: ${{ steps.readiness.outputs.app-ready }}
     steps:
@@ -54,7 +54,7 @@ jobs:
   scaffold:
     needs: preflight
     if: needs.preflight.outputs.app-ready != 'true'
-    runs-on: [self-hosted, linux, x64, huddle-ci]
+    runs-on: [self-hosted, linux, ARM64, huddle-ci]
     steps:
       - name: Report scaffold state
         run: |
@@ -63,7 +63,7 @@ jobs:
   test:
     needs: preflight
     if: needs.preflight.outputs.app-ready == 'true'
-    runs-on: [self-hosted, linux, x64, huddle-ci]
+    runs-on: [self-hosted, linux, ARM64, huddle-ci]
     strategy:
       fail-fast: false
       matrix:
@@ -105,7 +105,7 @@ jobs:
       needs.preflight.outputs.app-ready == 'true' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, linux, x64, huddle-ci]
+    runs-on: [self-hosted, linux, ARM64, huddle-ci]
     steps:
       - uses: actions/checkout@v4
         with:

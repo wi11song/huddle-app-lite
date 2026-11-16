@@ -57,6 +57,7 @@ install \
 
 cat >/etc/sudoers.d/huddle-deploy <<EOF
 huddle-deploy ALL=(root) NOPASSWD: \
+  $systemctl_path enable huddle-app.service, \
   $systemctl_path start huddle-app.service, \
   $systemctl_path stop huddle-app.service, \
   $systemctl_path restart huddle-app.service
@@ -65,7 +66,11 @@ chmod 0440 /etc/sudoers.d/huddle-deploy
 visudo --check --file=/etc/sudoers.d/huddle-deploy
 
 systemctl daemon-reload
-systemctl enable huddle-app.service
+if [[ -L /opt/huddle-app/current ]]; then
+  systemctl enable huddle-app.service
+else
+  systemctl disable --now huddle-app.service
+fi
 
 cat <<'EOF'
 Host directories, accounts, deployment command, and systemd unit are installed.

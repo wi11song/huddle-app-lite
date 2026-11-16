@@ -21,7 +21,7 @@ jobs:
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main'
-    runs-on: [self-hosted, linux, x64, huddle-deploy]
+    runs-on: [self-hosted, linux, ARM64, huddle-deploy]
     outputs:
       artifact-found: ${{ steps.artifact.outputs.found }}
     steps:
@@ -48,7 +48,7 @@ jobs:
   deploy:
     needs: inspect
     if: needs.inspect.outputs.artifact-found == 'true'
-    runs-on: [self-hosted, linux, x64, huddle-deploy]
+    runs-on: [self-hosted, linux, ARM64, huddle-deploy]
     environment:
       name: lan-production
       url: http://huddle.internal:8000
