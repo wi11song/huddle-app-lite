@@ -16,14 +16,11 @@ concurrency:
 
 jobs:
   preflight:
-    if: >-
-      github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, linux, ARM64, huddle-ci]
+    runs-on: ubuntu-24.04
     outputs:
       app-ready: ${{ steps.readiness.outputs.app-ready }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - id: readiness
         name: Detect application scaffold
@@ -54,7 +51,7 @@ jobs:
   scaffold:
     needs: preflight
     if: needs.preflight.outputs.app-ready != 'true'
-    runs-on: [self-hosted, linux, ARM64, huddle-ci]
+    runs-on: ubuntu-24.04
     steps:
       - name: Report scaffold state
         run: |
@@ -63,7 +60,7 @@ jobs:
   test:
     needs: preflight
     if: needs.preflight.outputs.app-ready == 'true'
-    runs-on: [self-hosted, linux, ARM64, huddle-ci]
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -71,9 +68,9 @@ jobs:
           - "3.10"
           - "3.13"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -105,30 +102,24 @@ jobs:
       needs.preflight.outputs.app-ready == 'true' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, linux, ARM64, huddle-ci]
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
 
       - name: Assemble immutable release
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p bundle/wheelhouse
-          git archive "$GITHUB_SHA" | tar -x -C bundle
-          python -m pip download \
-            --requirement requirements.lock \
-            --dest bundle/wheelhouse
-          tar -C bundle -czf "huddle-app-$GITHUB_SHA.tar.gz" .
+          git archive \
+            --format=tar.gz \
+            --output="huddle-app-$GITHUB_SHA.tar.gz" \
+            "$GITHUB_SHA"
           sha256sum "huddle-app-$GITHUB_SHA.tar.gz" \
             > "huddle-app-$GITHUB_SHA.sha256"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: huddle-app-${{ github.sha }}
           path: |
