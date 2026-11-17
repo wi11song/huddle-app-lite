@@ -37,7 +37,7 @@ flowchart LR
         SCHED[scheduling.py<br/>pure functions]
         DBL[db.py<br/>sqlite3]
     end
-    FILE[(when2meet.db<br/>single SQLite file)]
+    FILE[(huddle.db<br/>single SQLite file)]
 
     UI -- "GET static files" --> API
     UI -- "JSON REST + polling" --> API

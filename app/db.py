@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 
 DATABASE_ENVIRONMENT_VARIABLE = "HUDDLE_DB_PATH"
-DEFAULT_DATABASE_PATH = Path("when2meet.db")
+DEFAULT_DATABASE_PATH = Path("huddle.db")
 SCHEMA_VERSION = 1
 
 SCHEMA_SQL = """
