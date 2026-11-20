@@ -17,7 +17,7 @@ def test_root_health_and_readiness(tmp_path):
         readiness_response = client.get("/readyz")
 
     assert root_response.status_code == 200
-    assert "Huddle App Lite" in root_response.text
+    assert "Create your huddle" in root_response.text
     assert health_response.json() == {"status": "ok"}
     assert readiness_response.json() == {"status": "ready"}
     assert database_path.exists()
