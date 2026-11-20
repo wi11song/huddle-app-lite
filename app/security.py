@@ -73,6 +73,11 @@ def hash_edit_token(edit_token: str) -> str:
     return hashlib.sha256(edit_token.encode("utf-8")).hexdigest()
 
 
+def verify_edit_token(edit_token: str, stored_hash: str) -> bool:
+    """Compare an edit token with a stored hash in constant time."""
+    return hmac.compare_digest(hash_edit_token(edit_token), stored_hash)
+
+
 def _encode_bytes(value: bytes) -> str:
     return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
 

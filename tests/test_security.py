@@ -4,6 +4,7 @@ from app.security import (
     create_edit_token,
     hash_edit_token,
     hash_password,
+    verify_edit_token,
     verify_password,
 )
 
@@ -34,3 +35,5 @@ def test_edit_tokens_are_random_and_stored_as_hashes():
     assert len(first_token) >= 43
     assert hash_edit_token(first_token) != first_token
     assert hash_edit_token(first_token) == hash_edit_token(first_token)
+    assert verify_edit_token(first_token, hash_edit_token(first_token))
+    assert not verify_edit_token(second_token, hash_edit_token(first_token))

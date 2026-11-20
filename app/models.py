@@ -132,6 +132,22 @@ class ParticipantJoined(BaseModel):
     edit_token: str
 
 
+class AvailabilityUpdate(BaseModel):
+    """Complete participant availability bitstring."""
+
+    availability: str = Field(
+        min_length=1,
+        max_length=1344,
+        pattern=r"^[01]+$",
+    )
+
+
+class EventVersion(BaseModel):
+    """Monotonic event revision used for lightweight polling."""
+
+    version: int
+
+
 class EventDetailResponse(BaseModel):
     """Event view shaped for later participant and heatmap support."""
 
