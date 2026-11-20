@@ -10,7 +10,9 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import FastAPI, Header, HTTPException, Query, status
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 
 from .availability import (
     InvalidAvailabilityError,
@@ -52,22 +54,7 @@ from .suggestions import (
 )
 
 LOGGER = logging.getLogger(__name__)
-
-ROOT_PAGE = """<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Huddle App Lite</title>
-</head>
-<body>
-  <main>
-    <h1>Huddle App Lite</h1>
-    <p>The application foundation is running.</p>
-  </main>
-</body>
-</html>
-"""
+STATIC_DIRECTORY = Path(__file__).parent / "static"
 
 
 def create_app(database_path: Path | str | None = None) -> FastAPI:
@@ -90,10 +77,24 @@ def create_app(database_path: Path | str | None = None) -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+    application.add_middleware(GZipMiddleware, minimum_size=1000)
+    application.mount(
+        "/static",
+        StaticFiles(directory=STATIC_DIRECTORY),
+        name="static",
+    )
 
-    @application.get("/", response_class=HTMLResponse, include_in_schema=False)
-    async def index() -> str:
-        return ROOT_PAGE
+    @application.get("/", response_class=FileResponse, include_in_schema=False)
+    async def index() -> FileResponse:
+        return FileResponse(STATIC_DIRECTORY / "index.html")
+
+    @application.get(
+        "/e/{slug}",
+        response_class=FileResponse,
+        include_in_schema=False,
+    )
+    async def event_page(slug: str) -> FileResponse:
+        return FileResponse(STATIC_DIRECTORY / "event.html")
 
     @application.get("/healthz")
     async def health() -> dict[str, str]:
