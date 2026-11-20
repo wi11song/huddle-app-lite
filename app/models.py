@@ -148,6 +148,21 @@ class EventVersion(BaseModel):
     version: int
 
 
+class SuggestionWindow(BaseModel):
+    """Ranked meeting window and the participants available throughout it."""
+
+    start_slot: int
+    attendee_count: int
+    attendee_names: list[str]
+
+
+class SuggestionsResponse(BaseModel):
+    """Meeting suggestions for one requested duration."""
+
+    earliest_common_slot: int | None
+    best_windows: list[SuggestionWindow]
+
+
 class EventDetailResponse(BaseModel):
     """Event view shaped for later participant and heatmap support."""
 

@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import FastAPI, Header, HTTPException, status
+from fastapi import FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from .availability import (
@@ -38,6 +38,7 @@ from .models import (
     EventVersion,
     ParticipantJoin,
     ParticipantJoined,
+    SuggestionsResponse,
 )
 from .participants import (
     EventNotFoundError,
@@ -45,6 +46,10 @@ from .participants import (
     join_participant,
 )
 from .scheduling import group_counts
+from .suggestions import (
+    DurationExceedsDailyWindowError,
+    get_suggestions,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -202,6 +207,34 @@ def create_app(database_path: Path | str | None = None) -> FastAPI:
                 detail="event not found",
             )
         return EventVersion(version=version)
+
+    @application.get(
+        "/api/events/{slug}/suggestions",
+        response_model=SuggestionsResponse,
+    )
+    def get_suggestions_route(
+        slug: str,
+        duration_minutes: Annotated[
+            int,
+            Query(gt=0, le=1440),
+        ] = 60,
+    ) -> SuggestionsResponse:
+        try:
+            return get_suggestions(
+                application.state.database_path,
+                slug,
+                duration_minutes,
+            )
+        except EventNotFoundError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="event not found",
+            ) from None
+        except DurationExceedsDailyWindowError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(error),
+            ) from None
 
     @application.get(
         "/api/events/{slug}",
