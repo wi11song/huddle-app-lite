@@ -111,6 +111,27 @@ class ParticipantResponse(BaseModel):
     availability: str
 
 
+class ParticipantJoin(BaseModel):
+    """Input accepted when joining or returning to an event."""
+
+    name: str = Field(min_length=1, max_length=50)
+    password: str | None = Field(default=None, min_length=1, max_length=128)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def trim_name(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+
+class ParticipantJoined(BaseModel):
+    """Participant identity and plaintext token returned only at issuance."""
+
+    participant_id: int
+    edit_token: str
+
+
 class EventDetailResponse(BaseModel):
     """Event view shaped for later participant and heatmap support."""
 

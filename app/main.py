@@ -18,7 +18,18 @@ from .db import (
     resolve_database_path,
 )
 from .events import create_event, get_event, list_event_participants
-from .models import EventCreate, EventCreated, EventDetailResponse
+from .models import (
+    EventCreate,
+    EventCreated,
+    EventDetailResponse,
+    ParticipantJoin,
+    ParticipantJoined,
+)
+from .participants import (
+    EventNotFoundError,
+    InvalidParticipantPasswordError,
+    join_participant,
+)
 from .scheduling import group_counts
 
 LOGGER = logging.getLogger(__name__)
@@ -89,6 +100,36 @@ def create_app(database_path: Path | str | None = None) -> FastAPI:
     def create_event_route(request: EventCreate) -> EventCreated:
         event = create_event(application.state.database_path, request)
         return EventCreated(slug=event.slug)
+
+    @application.post(
+        "/api/events/{slug}/participants",
+        response_model=ParticipantJoined,
+    )
+    def join_participant_route(
+        slug: str,
+        request: ParticipantJoin,
+    ) -> ParticipantJoined:
+        try:
+            result = join_participant(
+                application.state.database_path,
+                slug,
+                request,
+            )
+        except EventNotFoundError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="event not found",
+            ) from None
+        except InvalidParticipantPasswordError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="invalid participant password",
+            ) from None
+
+        return ParticipantJoined(
+            participant_id=result.participant_id,
+            edit_token=result.edit_token,
+        )
 
     @application.get(
         "/api/events/{slug}",
