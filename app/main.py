@@ -7,21 +7,35 @@ import sqlite3
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, status
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, Header, HTTPException, status
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
+from .availability import (
+    InvalidAvailabilityError,
+    InvalidEditTokenError,
+    ParticipantNotFoundError,
+    save_availability,
+)
 from .db import (
     DatabaseNotReadyError,
     check_readiness,
     initialize_database,
     resolve_database_path,
 )
-from .events import create_event, get_event, list_event_participants
+from .events import (
+    create_event,
+    get_event,
+    get_event_version,
+    list_event_participants,
+)
 from .models import (
+    AvailabilityUpdate,
     EventCreate,
     EventCreated,
     EventDetailResponse,
+    EventVersion,
     ParticipantJoin,
     ParticipantJoined,
 )
@@ -130,6 +144,64 @@ def create_app(database_path: Path | str | None = None) -> FastAPI:
             participant_id=result.participant_id,
             edit_token=result.edit_token,
         )
+
+    @application.put(
+        "/api/events/{slug}/participants/{participant_id}/availability",
+        status_code=status.HTTP_204_NO_CONTENT,
+        response_class=Response,
+    )
+    def save_availability_route(
+        slug: str,
+        participant_id: int,
+        request: AvailabilityUpdate,
+        edit_token: Annotated[
+            str,
+            Header(alias="X-Edit-Token", min_length=1),
+        ],
+    ) -> Response:
+        try:
+            save_availability(
+                application.state.database_path,
+                slug,
+                participant_id,
+                request.availability,
+                edit_token,
+            )
+        except EventNotFoundError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="event not found",
+            ) from None
+        except ParticipantNotFoundError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="participant not found",
+            ) from None
+        except InvalidEditTokenError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="invalid edit token",
+            ) from None
+        except InvalidAvailabilityError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(error),
+            ) from None
+
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @application.get(
+        "/api/events/{slug}/version",
+        response_model=EventVersion,
+    )
+    def get_event_version_route(slug: str) -> EventVersion:
+        version = get_event_version(application.state.database_path, slug)
+        if version is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="event not found",
+            )
+        return EventVersion(version=version)
 
     @application.get(
         "/api/events/{slug}",

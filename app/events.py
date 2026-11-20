@@ -120,6 +120,19 @@ def get_event(
     return _event_from_row(row) if row is not None else None
 
 
+def get_event_version(
+    database_path: Path | str,
+    slug: str,
+) -> int | None:
+    """Return the current event revision without loading the full event."""
+    with connect(database_path, existing=True) as connection:
+        row = connection.execute(
+            "SELECT revision FROM events WHERE slug = ?",
+            (slug,),
+        ).fetchone()
+    return int(row["revision"]) if row is not None else None
+
+
 def list_event_participants(
     database_path: Path | str,
     slug: str,
