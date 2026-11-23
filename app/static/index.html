@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Create a lightweight group scheduling event.">
+  <title>Create an event · Huddle</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body data-page="create">
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="Huddle home">
+      <span class="brand-mark" aria-hidden="true">H</span>
+      <span>Huddle</span>
+    </a>
+    <p class="tagline">Find a time together, without the overhead.</p>
+  </header>
+
+  <main class="page-shell">
+    <section class="hero" aria-labelledby="page-title">
+      <p class="eyebrow">Lightweight group scheduling</p>
+      <h1 id="page-title">Create your huddle</h1>
+      <p class="hero-copy">
+        Pick candidate dates and a daily time range. You will get a private
+        link to share with everyone.
+      </p>
+    </section>
+
+    <section class="panel form-panel" aria-labelledby="event-form-title">
+      <div class="panel-heading">
+        <div>
+          <p class="step-label">Step 1 of 1</p>
+          <h2 id="event-form-title">Event details</h2>
+        </div>
+        <span class="privacy-note">No account required</span>
+      </div>
+
+      <form id="event-form" novalidate>
+        <label class="field field-wide">
+          <span>Event name</span>
+          <input
+            id="event-name"
+            name="name"
+            type="text"
+            maxlength="100"
+            placeholder="Team planning session"
+            autocomplete="off"
+            required
+          >
+        </label>
+
+        <fieldset class="field field-wide">
+          <legend>Candidate dates</legend>
+          <div id="date-list" class="date-list"></div>
+          <button id="add-date" class="button button-secondary" type="button">
+            Add another date
+          </button>
+        </fieldset>
+
+        <div class="field-grid">
+          <label class="field">
+            <span>Daily start</span>
+            <input id="start-time" name="start_time" type="time" value="09:00" required>
+          </label>
+
+          <label class="field">
+            <span>Daily end</span>
+            <input id="end-time" name="end_time" type="time" value="17:00" required>
+          </label>
+
+          <label class="field">
+            <span>Time slots</span>
+            <select id="slot-minutes" name="slot_minutes">
+              <option value="15">15 minutes</option>
+              <option value="30">30 minutes</option>
+              <option value="60">60 minutes</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Timezone</span>
+            <input
+              id="timezone"
+              name="timezone"
+              type="text"
+              maxlength="100"
+              placeholder="America/New_York"
+              required
+            >
+          </label>
+        </div>
+
+        <p id="form-status" class="status-message" role="status" aria-live="polite"></p>
+
+        <button id="create-event" class="button button-primary button-large" type="submit">
+          Create event
+        </button>
+      </form>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Local-first scheduling powered by FastAPI and SQLite.</p>
+  </footer>
+</body>
+</html>
