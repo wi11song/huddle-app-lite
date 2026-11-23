@@ -116,19 +116,48 @@
         </section>
       </div>
 
-      <section class="panel preview-panel" aria-labelledby="availability-title">
+      <section id="availability-locked" class="panel preview-panel" aria-labelledby="availability-preview-title">
         <div>
-          <p class="step-label">Coming next</p>
-          <h2 id="availability-title">Availability grid</h2>
+          <p class="step-label">Your availability</p>
+          <h2 id="availability-preview-title">Join to paint your schedule</h2>
           <p>
-            The event and participant flow are connected. Interactive time
-            painting and the group heatmap arrive in the next development slice.
+            Enter your name above, then click or drag across the time slots when
+            you are free. Changes save automatically.
           </p>
         </div>
         <div class="grid-preview" aria-hidden="true">
           <span></span><span></span><span></span><span></span>
           <span></span><span></span><span></span><span></span>
           <span></span><span></span><span></span><span></span>
+        </div>
+      </section>
+
+      <section id="availability-panel" class="panel availability-panel" aria-labelledby="availability-title" hidden>
+        <div class="availability-heading">
+          <div>
+            <p class="step-label">Your availability</p>
+            <h2 id="availability-title">When are you free?</h2>
+            <p class="field-help">
+              Click or drag to paint available times. Drag again to clear them.
+            </p>
+          </div>
+          <div class="availability-meta">
+            <span class="availability-key">
+              <span class="key-swatch" aria-hidden="true"></span>
+              Available
+            </span>
+            <p id="availability-status" class="status-message" role="status" aria-live="polite">
+              All changes saved
+            </p>
+          </div>
+        </div>
+        <div class="schedule-scroll">
+          <div
+            id="availability-grid"
+            class="availability-grid"
+            role="grid"
+            aria-label="Your availability"
+          ></div>
         </div>
       </section>
     </div>

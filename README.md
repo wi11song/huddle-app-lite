@@ -12,7 +12,7 @@
 ## 1. Purpose
 
 A lightweight, self-hosted group scheduling web app inspired by when2meet.com.
-An organizer creates an event with candidate dates and a daily time window and
+An organizer creates an event with proposed dates and a daily time window and
 shares a link. Each participant paints the times they're free on a grid. The app
 shows a group heatmap and suggests the best meeting times.
 
