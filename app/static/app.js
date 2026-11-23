@@ -1,6 +1,17 @@
 "use strict";
 
 const page = document.body.dataset.page;
+const eventPageState = {
+  slug: null,
+  data: null,
+  session: null,
+  availability: null,
+  saveTimer: null,
+  saving: false,
+  painting: false,
+  paintValue: "1",
+  pointerId: null,
+};
 
 if (page === "create") {
   initializeCreatePage();
@@ -36,7 +47,7 @@ function initializeCreatePage() {
       .filter(Boolean);
 
     if (dates.length === 0) {
-      setStatus(status, "Add at least one candidate date.", "error");
+      setStatus(status, "Add at least one proposed date.", "error");
       return;
     }
 
@@ -82,7 +93,7 @@ function addDateRow(container, value) {
   input.name = "dates";
   input.value = value;
   input.required = true;
-  input.setAttribute("aria-label", "Candidate date");
+  input.setAttribute("aria-label", "Proposed date");
 
   const removeButton = document.createElement("button");
   removeButton.className = "button remove-date";
@@ -104,13 +115,15 @@ async function initializeEventPage() {
   const content = document.querySelector("#event-content");
   const errorPanel = document.querySelector("#event-error");
 
+  eventPageState.slug = slug;
   configureShareLink();
   configureJoinForm(slug);
 
   try {
     const eventData = await loadEvent(slug);
+    eventPageState.data = eventData;
     renderEvent(eventData);
-    restoreSession(slug);
+    restoreSession(slug, eventData);
     loading.hidden = true;
     content.hidden = false;
   } catch (error) {
@@ -209,16 +222,21 @@ function configureJoinForm(slug) {
           }),
         },
       );
+      const session = {
+        participant_id: result.participant_id,
+        edit_token: result.edit_token,
+        name,
+      };
       localStorage.setItem(
         sessionKey(slug),
-        JSON.stringify({
-          participant_id: result.participant_id,
-          edit_token: result.edit_token,
-          name,
-        }),
+        JSON.stringify(session),
       );
+      eventPageState.session = session;
       showSession(name);
-      renderEvent(await loadEvent(slug));
+      const refreshedEvent = await loadEvent(slug);
+      eventPageState.data = refreshedEvent;
+      renderEvent(refreshedEvent);
+      showAvailabilityGrid(refreshedEvent, session);
     } catch (error) {
       setStatus(status, error.message, "error");
       submitButton.disabled = false;
@@ -227,16 +245,21 @@ function configureJoinForm(slug) {
   });
 
   clearSessionButton.addEventListener("click", () => {
+    clearTimeout(eventPageState.saveTimer);
     localStorage.removeItem(sessionKey(slug));
+    eventPageState.session = null;
+    eventPageState.availability = null;
     document.querySelector("#session-summary").hidden = true;
     form.hidden = false;
     form.reset();
     submitButton.disabled = false;
     submitButton.textContent = "Join event";
+    document.querySelector("#availability-panel").hidden = true;
+    document.querySelector("#availability-locked").hidden = false;
   });
 }
 
-function restoreSession(slug) {
+function restoreSession(slug, eventData) {
   try {
     const session = JSON.parse(localStorage.getItem(sessionKey(slug)));
     if (
@@ -245,11 +268,20 @@ function restoreSession(slug) {
       && typeof session.edit_token === "string"
       && typeof session.name === "string"
     ) {
-      showSession(session.name);
+      const participantExists = eventData.participants.some(
+        (participant) => participant.id === session.participant_id,
+      );
+      if (participantExists) {
+        eventPageState.session = session;
+        showSession(session.name);
+        showAvailabilityGrid(eventData, session);
+        return;
+      }
     }
   } catch (_error) {
-    localStorage.removeItem(sessionKey(slug));
+    // Invalid local data is cleared below.
   }
+  localStorage.removeItem(sessionKey(slug));
 }
 
 function showSession(name) {
@@ -257,6 +289,218 @@ function showSession(name) {
   document.querySelector("#session-summary").hidden = false;
   document.querySelector("#session-description").textContent =
     `Signed in as ${name}. Your edit access is saved in this browser.`;
+}
+
+function showAvailabilityGrid(eventData, session) {
+  const participant = eventData.participants.find(
+    (eventParticipant) => eventParticipant.id === session.participant_id,
+  );
+  if (!participant) {
+    return;
+  }
+
+  eventPageState.availability = [...participant.availability];
+  document.querySelector("#availability-locked").hidden = true;
+  document.querySelector("#availability-panel").hidden = false;
+  setStatus(
+    document.querySelector("#availability-status"),
+    "All changes saved",
+    "success",
+  );
+
+  const grid = document.querySelector("#availability-grid");
+  renderAvailabilityGrid(grid, eventData.event);
+  configureAvailabilityPainting(grid);
+}
+
+function renderAvailabilityGrid(grid, event) {
+  const slotsPerDay =
+    (event.day_end_minute - event.day_start_minute) / event.slot_minutes;
+  grid.style.setProperty("--date-count", String(event.dates.length));
+  grid.replaceChildren();
+
+  const headerRow = document.createElement("div");
+  headerRow.className = "availability-row";
+  headerRow.setAttribute("role", "row");
+
+  const corner = document.createElement("div");
+  corner.className = "availability-corner";
+  corner.setAttribute("role", "columnheader");
+  corner.textContent = "Time";
+  headerRow.append(corner);
+
+  for (const date of event.dates) {
+    const header = document.createElement("div");
+    header.className = "availability-date";
+    header.setAttribute("role", "columnheader");
+    header.textContent = formatGridDate(event.schedule_kind, date);
+    headerRow.append(header);
+  }
+  grid.append(headerRow);
+
+  for (let slotInDay = 0; slotInDay < slotsPerDay; slotInDay += 1) {
+    const row = document.createElement("div");
+    row.className = "availability-row";
+    row.setAttribute("role", "row");
+
+    const minute =
+      event.day_start_minute + slotInDay * event.slot_minutes;
+    const timeLabel = document.createElement("div");
+    timeLabel.className = "time-label";
+    timeLabel.setAttribute("role", "rowheader");
+    timeLabel.textContent = minuteToTime(minute);
+    row.append(timeLabel);
+
+    for (let dayIndex = 0; dayIndex < event.dates.length; dayIndex += 1) {
+      const slotIndex = dayIndex * slotsPerDay + slotInDay;
+      const cell = document.createElement("button");
+      cell.className = "availability-cell";
+      cell.type = "button";
+      cell.dataset.slotIndex = String(slotIndex);
+      cell.setAttribute("role", "gridcell");
+      cell.setAttribute(
+        "aria-label",
+        `${formatGridDate(event.schedule_kind, event.dates[dayIndex])} at ${minuteToTime(minute)}`,
+      );
+      updateAvailabilityCell(cell, slotIndex);
+      row.append(cell);
+    }
+    grid.append(row);
+  }
+}
+
+function configureAvailabilityPainting(grid) {
+  if (grid.dataset.paintingConfigured === "true") {
+    return;
+  }
+  grid.dataset.paintingConfigured = "true";
+
+  grid.addEventListener("pointerdown", (event) => {
+    const cell = event.target.closest(".availability-cell");
+    if (!cell) {
+      return;
+    }
+    event.preventDefault();
+    const slotIndex = Number(cell.dataset.slotIndex);
+    eventPageState.painting = true;
+    eventPageState.pointerId = event.pointerId;
+    eventPageState.paintValue =
+      eventPageState.availability[slotIndex] === "1" ? "0" : "1";
+    grid.setPointerCapture(event.pointerId);
+    paintAvailabilityCell(cell);
+  });
+
+  grid.addEventListener("pointermove", (event) => {
+    if (
+      !eventPageState.painting
+      || event.pointerId !== eventPageState.pointerId
+    ) {
+      return;
+    }
+    event.preventDefault();
+    const element = document.elementFromPoint(event.clientX, event.clientY);
+    const cell = element?.closest(".availability-cell");
+    if (cell && grid.contains(cell)) {
+      paintAvailabilityCell(cell);
+    }
+  });
+
+  const finishPainting = (event) => {
+    if (event.pointerId === eventPageState.pointerId) {
+      eventPageState.painting = false;
+      eventPageState.pointerId = null;
+    }
+  };
+  grid.addEventListener("pointerup", finishPainting);
+  grid.addEventListener("pointercancel", finishPainting);
+
+  grid.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+    const cell = event.target.closest(".availability-cell");
+    if (!cell) {
+      return;
+    }
+    event.preventDefault();
+    const slotIndex = Number(cell.dataset.slotIndex);
+    eventPageState.paintValue =
+      eventPageState.availability[slotIndex] === "1" ? "0" : "1";
+    paintAvailabilityCell(cell);
+  });
+}
+
+function paintAvailabilityCell(cell) {
+  const slotIndex = Number(cell.dataset.slotIndex);
+  if (eventPageState.availability[slotIndex] === eventPageState.paintValue) {
+    return;
+  }
+  eventPageState.availability[slotIndex] = eventPageState.paintValue;
+  updateAvailabilityCell(cell, slotIndex);
+  scheduleAvailabilitySave();
+}
+
+function updateAvailabilityCell(cell, slotIndex) {
+  const available = eventPageState.availability[slotIndex] === "1";
+  cell.classList.toggle("is-available", available);
+  cell.setAttribute("aria-selected", String(available));
+  cell.title = available ? "Available" : "Unavailable";
+}
+
+function scheduleAvailabilitySave() {
+  clearTimeout(eventPageState.saveTimer);
+  setStatus(
+    document.querySelector("#availability-status"),
+    "Unsaved changes…",
+    "",
+  );
+  eventPageState.saveTimer = setTimeout(saveAvailability, 400);
+}
+
+async function saveAvailability() {
+  if (!eventPageState.session || !eventPageState.availability) {
+    return;
+  }
+  if (eventPageState.saving) {
+    clearTimeout(eventPageState.saveTimer);
+    eventPageState.saveTimer = setTimeout(saveAvailability, 100);
+    return;
+  }
+
+  const savedSession = eventPageState.session;
+  const snapshot = eventPageState.availability.join("");
+  const status = document.querySelector("#availability-status");
+  eventPageState.saving = true;
+  setStatus(status, "Saving…", "");
+
+  try {
+    await requestJson(
+      (
+        `/api/events/${encodeURIComponent(eventPageState.slug)}/participants/`
+        + `${savedSession.participant_id}/availability`
+      ),
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Edit-Token": savedSession.edit_token,
+        },
+        body: JSON.stringify({availability: snapshot}),
+      },
+    );
+    if (eventPageState.session !== savedSession) {
+      return;
+    }
+    if (eventPageState.availability.join("") === snapshot) {
+      setStatus(status, "All changes saved", "success");
+    } else {
+      scheduleAvailabilitySave();
+    }
+  } catch (error) {
+    setStatus(status, `Save failed: ${error.message}`, "error");
+  } finally {
+    eventPageState.saving = false;
+  }
 }
 
 async function requestJson(url, options = {}) {
@@ -292,6 +536,18 @@ function formatSchedule(event) {
       }).format(new Date(year, month - 1, day));
     })
     .join(", ");
+}
+
+function formatGridDate(scheduleKind, value) {
+  if (scheduleKind === "weekdays") {
+    return value;
+  }
+  const [year, month, day] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(new Date(year, month - 1, day));
 }
 
 function timeToMinute(value) {

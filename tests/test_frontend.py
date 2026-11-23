@@ -29,6 +29,8 @@ def test_event_page_contains_join_and_share_shell(tmp_path):
     assert 'id="join-form"' in response.text
     assert 'id="participant-list"' in response.text
     assert 'id="availability-title"' in response.text
+    assert 'id="availability-grid"' in response.text
+    assert 'id="availability-status"' in response.text
 
 
 def test_static_css_and_javascript_are_served_and_compressed(tmp_path):
@@ -52,6 +54,10 @@ def test_frontend_avoids_inner_html_for_dynamic_content():
     assert ".innerHTML" not in script
     assert ".textContent" in script
     assert "localStorage.setItem" in script
+    assert '"pointerdown"' in script
+    assert '"pointermove"' in script
+    assert "setTimeout(saveAvailability, 400)" in script
+    assert '"X-Edit-Token"' in script
 
 
 def test_frontend_page_weight_stays_below_budget():
