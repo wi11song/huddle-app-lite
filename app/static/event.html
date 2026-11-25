@@ -211,6 +211,51 @@
           </aside>
         </div>
       </section>
+
+      <section id="suggestions-panel" class="panel suggestions-panel" aria-labelledby="suggestions-title">
+        <div class="suggestions-heading">
+          <div>
+            <p class="step-label">Meeting suggestions</p>
+            <h2 id="suggestions-title">Best times to meet</h2>
+            <p class="field-help">
+              Choose a meeting length to find the earliest common time and the
+              three windows with the strongest attendance.
+            </p>
+          </div>
+          <form id="suggestions-form" class="duration-form">
+            <label for="suggestion-duration">Duration</label>
+            <div class="duration-controls">
+              <input
+                id="suggestion-duration"
+                name="duration_minutes"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                max="1440"
+                value="60"
+                required
+              >
+              <span>minutes</span>
+              <button class="button button-secondary" type="submit">
+                Update
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <p id="suggestions-status" class="status-message" role="status" aria-live="polite"></p>
+        <div class="suggestions-layout">
+          <article class="earliest-suggestion" aria-labelledby="earliest-title">
+            <p class="step-label">Everyone can attend</p>
+            <h3 id="earliest-title">Checking availability…</h3>
+            <p id="earliest-description"></p>
+          </article>
+          <div>
+            <p class="step-label">Top three windows</p>
+            <ol id="suggestion-list" class="suggestion-list"></ol>
+          </div>
+        </div>
+      </section>
     </div>
   </main>
 

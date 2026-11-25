@@ -15,6 +15,7 @@ const eventPageState = {
   pollTimer: null,
   polling: false,
   selectedGroupSlot: null,
+  suggestionRequest: 0,
 };
 
 if (page === "create") {
@@ -129,8 +130,10 @@ async function initializeEventPage() {
     eventPageState.version = eventData.version;
     renderEvent(eventData);
     restoreSession(slug, eventData);
+    configureSuggestions(eventData.event);
     loading.hidden = true;
     content.hidden = false;
+    void loadSuggestions();
     startEventPolling();
   } catch (error) {
     loading.hidden = true;
@@ -319,6 +322,7 @@ async function pollEventVersion() {
       eventPageState.version = refreshed.version;
       renderParticipants(refreshed.participants);
       renderGroupHeatmap(refreshed);
+      void loadSuggestions();
     }
     setStatus(status, "Live updates on", "success");
   } catch (_error) {
@@ -326,6 +330,127 @@ async function pollEventVersion() {
   } finally {
     eventPageState.polling = false;
   }
+}
+
+function configureSuggestions(event) {
+  const form = document.querySelector("#suggestions-form");
+  const input = document.querySelector("#suggestion-duration");
+  const dailyMinutes = event.day_end_minute - event.day_start_minute;
+  input.min = String(event.slot_minutes);
+  input.max = String(dailyMinutes);
+  input.step = String(event.slot_minutes);
+  input.value = String(Math.min(60, dailyMinutes));
+
+  form.addEventListener("submit", (submitEvent) => {
+    submitEvent.preventDefault();
+    if (form.reportValidity()) {
+      void loadSuggestions();
+    }
+  });
+}
+
+async function loadSuggestions() {
+  const input = document.querySelector("#suggestion-duration");
+  const status = document.querySelector("#suggestions-status");
+  const durationMinutes = Number(input.value);
+  if (!input.reportValidity() || !Number.isInteger(durationMinutes)) {
+    return;
+  }
+
+  const requestId = eventPageState.suggestionRequest + 1;
+  eventPageState.suggestionRequest = requestId;
+  setStatus(status, "Finding the best times…", "");
+
+  try {
+    const suggestions = await requestJson(
+      (
+        `/api/events/${encodeURIComponent(eventPageState.slug)}/suggestions`
+        + `?duration_minutes=${encodeURIComponent(durationMinutes)}`
+      ),
+    );
+    if (requestId !== eventPageState.suggestionRequest) {
+      return;
+    }
+    renderSuggestions(suggestions, durationMinutes);
+    setStatus(status, "Suggestions are up to date", "success");
+  } catch (error) {
+    if (requestId === eventPageState.suggestionRequest) {
+      setStatus(status, error.message, "error");
+    }
+  }
+}
+
+function renderSuggestions(suggestions, durationMinutes) {
+  const participants = eventPageState.data.participants;
+  const earliestTitle = document.querySelector("#earliest-title");
+  const earliestDescription = document.querySelector(
+    "#earliest-description",
+  );
+  const list = document.querySelector("#suggestion-list");
+  list.replaceChildren();
+
+  if (participants.length === 0) {
+    earliestTitle.textContent = "Waiting for responses";
+    earliestDescription.textContent =
+      "Suggestions will appear after someone shares their availability.";
+  } else if (suggestions.earliest_common_slot === null) {
+    earliestTitle.textContent = "No common time";
+    earliestDescription.textContent =
+      "No window currently works for everyone. Compare the strongest options.";
+  } else {
+    earliestTitle.textContent = formatSuggestionWindow(
+      suggestions.earliest_common_slot,
+      durationMinutes,
+    );
+    earliestDescription.textContent =
+      `All ${participants.length} participants can attend.`;
+  }
+
+  if (suggestions.best_windows.length === 0) {
+    const emptyItem = document.createElement("li");
+    emptyItem.className = "suggestion-empty";
+    emptyItem.textContent = "No ranked windows yet.";
+    list.append(emptyItem);
+    return;
+  }
+
+  for (const [index, window] of suggestions.best_windows.entries()) {
+    const item = document.createElement("li");
+    const rank = document.createElement("span");
+    const details = document.createElement("div");
+    const time = document.createElement("strong");
+    const count = document.createElement("span");
+    const names = document.createElement("p");
+    rank.className = "suggestion-rank";
+    rank.textContent = String(index + 1);
+    time.textContent = formatSuggestionWindow(
+      window.start_slot,
+      durationMinutes,
+    );
+    count.className = "suggestion-count";
+    count.textContent =
+      `${window.attendee_count} of ${participants.length} can attend`;
+    names.textContent = window.attendee_names.join(", ") || "No attendees";
+    details.append(time, count, names);
+    item.append(rank, details);
+    list.append(item);
+  }
+}
+
+function formatSuggestionWindow(startSlot, durationMinutes) {
+  const event = eventPageState.data.event;
+  const slotsPerDay =
+    (event.day_end_minute - event.day_start_minute) / event.slot_minutes;
+  const dayIndex = Math.floor(startSlot / slotsPerDay);
+  const slotInDay = startSlot % slotsPerDay;
+  const startMinute =
+    event.day_start_minute + slotInDay * event.slot_minutes;
+  const occupiedSlots = Math.ceil(durationMinutes / event.slot_minutes);
+  const endMinute = startMinute + occupiedSlots * event.slot_minutes;
+  return [
+    formatGridDate(event.schedule_kind, event.dates[dayIndex]),
+    `${minuteToTime(startMinute)}–${minuteToTime(endMinute)}`,
+  ].join(" · ");
 }
 
 function configureShareLink() {
@@ -397,6 +522,7 @@ function configureJoinForm(slug) {
       eventPageState.version = refreshedEvent.version;
       renderEvent(refreshedEvent);
       showAvailabilityGrid(refreshedEvent, session);
+      void loadSuggestions();
     } catch (error) {
       setStatus(status, error.message, "error");
       submitButton.disabled = false;
