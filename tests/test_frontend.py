@@ -34,6 +34,10 @@ def test_event_page_contains_join_and_share_shell(tmp_path):
     assert 'id="group-grid"' in response.text
     assert 'id="group-slot-detail"' in response.text
     assert 'id="group-refresh-status"' in response.text
+    assert 'id="suggestions-form"' in response.text
+    assert 'id="suggestion-duration"' in response.text
+    assert 'id="earliest-title"' in response.text
+    assert 'id="suggestion-list"' in response.text
 
 
 def test_static_css_and_javascript_are_served_and_compressed(tmp_path):
@@ -63,6 +67,9 @@ def test_frontend_avoids_inner_html_for_dynamic_content():
     assert '"X-Edit-Token"' in script
     assert "/version" in script
     assert "setInterval(pollEventVersion, 5000)" in script
+    assert "/suggestions" in script
+    assert "earliest_common_slot" in script
+    assert "best_windows" in script
 
 
 def test_frontend_page_weight_stays_below_budget():
