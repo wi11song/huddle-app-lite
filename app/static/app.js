@@ -11,6 +11,10 @@ const eventPageState = {
   painting: false,
   paintValue: "1",
   pointerId: null,
+  version: null,
+  pollTimer: null,
+  polling: false,
+  selectedGroupSlot: null,
 };
 
 if (page === "create") {
@@ -122,10 +126,12 @@ async function initializeEventPage() {
   try {
     const eventData = await loadEvent(slug);
     eventPageState.data = eventData;
+    eventPageState.version = eventData.version;
     renderEvent(eventData);
     restoreSession(slug, eventData);
     loading.hidden = true;
     content.hidden = false;
+    startEventPolling();
   } catch (error) {
     loading.hidden = true;
     errorPanel.hidden = false;
@@ -148,10 +154,15 @@ function renderEvent(data) {
     event.timezone,
   ].join(" · ");
 
+  renderParticipants(data.participants);
+  renderGroupHeatmap(data);
+}
+
+function renderParticipants(participants) {
   const participantList = document.querySelector("#participant-list");
   participantList.replaceChildren();
 
-  for (const participant of data.participants) {
+  for (const participant of participants) {
     const item = document.createElement("li");
     const avatar = document.createElement("span");
     const name = document.createElement("span");
@@ -163,10 +174,158 @@ function renderEvent(data) {
   }
 
   document.querySelector("#participant-count").textContent = String(
-    data.participants.length,
+    participants.length,
   );
   document.querySelector("#empty-participants").hidden =
-    data.participants.length > 0;
+    participants.length > 0;
+}
+
+function renderGroupHeatmap(data) {
+  const {event, participants} = data;
+  const grid = document.querySelector("#group-grid");
+  const slotsPerDay =
+    (event.day_end_minute - event.day_start_minute) / event.slot_minutes;
+  const participantCount = participants.length;
+  grid.style.setProperty("--date-count", String(event.dates.length));
+  grid.replaceChildren();
+
+  const headerRow = document.createElement("div");
+  headerRow.className = "availability-row";
+  headerRow.setAttribute("role", "row");
+
+  const corner = document.createElement("div");
+  corner.className = "availability-corner";
+  corner.setAttribute("role", "columnheader");
+  corner.textContent = "Time";
+  headerRow.append(corner);
+
+  for (const date of event.dates) {
+    const header = document.createElement("div");
+    header.className = "availability-date";
+    header.setAttribute("role", "columnheader");
+    header.textContent = formatGridDate(event.schedule_kind, date);
+    headerRow.append(header);
+  }
+  grid.append(headerRow);
+
+  for (let slotInDay = 0; slotInDay < slotsPerDay; slotInDay += 1) {
+    const row = document.createElement("div");
+    row.className = "availability-row";
+    row.setAttribute("role", "row");
+    const minute =
+      event.day_start_minute + slotInDay * event.slot_minutes;
+    const timeLabel = document.createElement("div");
+    timeLabel.className = "time-label";
+    timeLabel.setAttribute("role", "rowheader");
+    timeLabel.textContent = minuteToTime(minute);
+    row.append(timeLabel);
+
+    for (let dayIndex = 0; dayIndex < event.dates.length; dayIndex += 1) {
+      const slotIndex = dayIndex * slotsPerDay + slotInDay;
+      const freeCount = data.free_counts[slotIndex] ?? 0;
+      const ratio = participantCount === 0 ? 0 : freeCount / participantCount;
+      const cell = document.createElement("button");
+      const dateLabel = formatGridDate(
+        event.schedule_kind,
+        event.dates[dayIndex],
+      );
+      cell.className = "group-cell";
+      cell.type = "button";
+      cell.dataset.slotIndex = String(slotIndex);
+      cell.setAttribute("role", "gridcell");
+      cell.setAttribute(
+        "aria-label",
+        `${dateLabel} at ${minuteToTime(minute)}: ${freeCount} of ${participantCount} free`,
+      );
+      cell.setAttribute(
+        "aria-selected",
+        String(eventPageState.selectedGroupSlot === slotIndex),
+      );
+      cell.style.backgroundColor =
+        `rgba(46, 125, 99, ${0.08 + ratio * 0.84})`;
+      cell.classList.toggle(
+        "is-selected",
+        eventPageState.selectedGroupSlot === slotIndex,
+      );
+      for (const eventName of ["pointerover", "focusin", "click"]) {
+        cell.addEventListener(eventName, () => {
+          selectGroupSlot(slotIndex);
+        });
+      }
+      row.append(cell);
+    }
+    grid.append(row);
+  }
+
+  if (eventPageState.selectedGroupSlot !== null) {
+    selectGroupSlot(eventPageState.selectedGroupSlot);
+  }
+}
+
+function selectGroupSlot(slotIndex) {
+  const data = eventPageState.data;
+  if (!data || slotIndex < 0 || slotIndex >= data.free_counts.length) {
+    return;
+  }
+  eventPageState.selectedGroupSlot = slotIndex;
+  const event = data.event;
+  const slotsPerDay =
+    (event.day_end_minute - event.day_start_minute) / event.slot_minutes;
+  const dayIndex = Math.floor(slotIndex / slotsPerDay);
+  const slotInDay = slotIndex % slotsPerDay;
+  const minute = event.day_start_minute + slotInDay * event.slot_minutes;
+  const free = data.participants.filter(
+    (participant) => participant.availability[slotIndex] === "1",
+  );
+  const busy = data.participants.filter(
+    (participant) => participant.availability[slotIndex] !== "1",
+  );
+
+  for (const cell of document.querySelectorAll(".group-cell")) {
+    const selected = Number(cell.dataset.slotIndex) === slotIndex;
+    cell.classList.toggle("is-selected", selected);
+    cell.setAttribute("aria-selected", String(selected));
+  }
+  document.querySelector("#group-detail-title").textContent = [
+    formatGridDate(event.schedule_kind, event.dates[dayIndex]),
+    minuteToTime(minute),
+  ].join(" · ");
+  document.querySelector("#group-detail-count").textContent =
+    `${free.length} of ${data.participants.length} participants are free.`;
+  document.querySelector("#group-detail-free").textContent =
+    free.map((participant) => participant.name).join(", ") || "No one";
+  document.querySelector("#group-detail-busy").textContent =
+    busy.map((participant) => participant.name).join(", ") || "No one";
+}
+
+function startEventPolling() {
+  clearInterval(eventPageState.pollTimer);
+  eventPageState.pollTimer = window.setInterval(pollEventVersion, 5000);
+}
+
+async function pollEventVersion() {
+  if (eventPageState.polling || !eventPageState.slug) {
+    return;
+  }
+  eventPageState.polling = true;
+  const status = document.querySelector("#group-refresh-status");
+  try {
+    const current = await requestJson(
+      `/api/events/${encodeURIComponent(eventPageState.slug)}/version`,
+    );
+    if (current.version !== eventPageState.version) {
+      const refreshed = await loadEvent(eventPageState.slug);
+      eventPageState.data = refreshed;
+      eventPageState.version = refreshed.version;
+      renderParticipants(refreshed.participants);
+      renderGroupHeatmap(refreshed);
+    }
+    setStatus(status, "Live updates on", "success");
+  } catch (_error) {
+    setStatus(status, "Live updates paused", "error");
+  } finally {
+    eventPageState.polling = false;
+  }
 }
 
 function configureShareLink() {
@@ -235,6 +394,7 @@ function configureJoinForm(slug) {
       showSession(name);
       const refreshedEvent = await loadEvent(slug);
       eventPageState.data = refreshedEvent;
+      eventPageState.version = refreshedEvent.version;
       renderEvent(refreshedEvent);
       showAvailabilityGrid(refreshedEvent, session);
     } catch (error) {
@@ -496,6 +656,7 @@ async function saveAvailability() {
     } else {
       scheduleAvailabilitySave();
     }
+    void pollEventVersion();
   } catch (error) {
     setStatus(status, `Save failed: ${error.message}`, "error");
   } finally {
