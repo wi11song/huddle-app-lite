@@ -160,6 +160,57 @@
           ></div>
         </div>
       </section>
+
+      <section id="group-panel" class="panel group-panel" aria-labelledby="group-title">
+        <div class="availability-heading">
+          <div>
+            <p class="step-label">Group availability</p>
+            <h2 id="group-title">When can everyone meet?</h2>
+            <p class="field-help">
+              Darker cells mean more people are available. Hover, focus, or tap
+              a cell to see who is free.
+            </p>
+          </div>
+          <div class="availability-meta">
+            <span class="heatmap-key" aria-label="Heatmap intensity from fewer to more participants">
+              <span>Fewer</span>
+              <span class="heat-swatch heat-low" aria-hidden="true"></span>
+              <span class="heat-swatch heat-medium" aria-hidden="true"></span>
+              <span class="heat-swatch heat-high" aria-hidden="true"></span>
+              <span>More</span>
+            </span>
+            <p id="group-refresh-status" class="status-message" role="status" aria-live="polite">
+              Live updates on
+            </p>
+          </div>
+        </div>
+
+        <div class="group-layout">
+          <div class="schedule-scroll">
+            <div
+              id="group-grid"
+              class="group-grid"
+              role="grid"
+              aria-label="Group availability"
+            ></div>
+          </div>
+          <aside id="group-slot-detail" class="slot-detail" aria-live="polite">
+            <p class="step-label">Selected time</p>
+            <h3 id="group-detail-title">Choose a time slot</h3>
+            <p id="group-detail-count">Select any heatmap cell for details.</p>
+            <dl class="attendance-list">
+              <div>
+                <dt>Free</dt>
+                <dd id="group-detail-free">—</dd>
+              </div>
+              <div>
+                <dt>Busy</dt>
+                <dd id="group-detail-busy">—</dd>
+              </div>
+            </dl>
+          </aside>
+        </div>
+      </section>
     </div>
   </main>
 
